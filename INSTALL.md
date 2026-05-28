@@ -7,37 +7,13 @@ Ubuntu 24.04 x86_64
 Debian 12 x86_64
 ```
 
-Kernel package built today:
+Kernel package:
 
 ```text
 6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty
 ```
 
-## 1. Required Packages
-
-The built packages are on the build VPS:
-
-```text
-38.54.82.215:/root/build-bbrv3-6.13.7/
-```
-
-Files:
-
-```text
-linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-linux-libc-dev_1_amd64.deb
-```
-
-SHA256:
-
-```text
-c6f6c285dcaabea6c74c4ce9104c1f24306af6aa91488c025857b24d753833b3  linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-f771ac4bf1aeab9027ece24ab19fc263047d34879cbcc568c072e3ed9c419cc5  linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-9d0bb472282cd22696db71419b57b17592d9cba8918621aaa4607c77020f050a  linux-libc-dev_1_amd64.deb
-```
-
-## 2. Copy Packages to New VPS
+## 1. Download Packages from This Repository
 
 On the new VPS:
 
@@ -45,15 +21,34 @@ On the new VPS:
 mkdir -p /root/bbrplus-ai-kernel
 cd /root/bbrplus-ai-kernel
 
-scp root@38.54.82.215:/root/build-bbrv3-6.13.7/linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb .
-scp root@38.54.82.215:/root/build-bbrv3-6.13.7/linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb .
-scp root@38.54.82.215:/root/build-bbrv3-6.13.7/linux-libc-dev_1_amd64.deb .
+base_url="https://raw.githubusercontent.com/ericyiu9819/X/main/artifacts/deb"
+
+curl -fL -O "$base_url/linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb"
+curl -fL -O "$base_url/linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb"
+curl -fL -O "$base_url/linux-libc-dev_1_amd64.deb"
+curl -fL -O "$base_url/SHA256SUMS"
 ```
 
-Verify:
+## 2. Verify SHA256
 
 ```bash
-sha256sum *.deb
+sha256sum -c SHA256SUMS
+```
+
+Expected:
+
+```text
+linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb: OK
+linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb: OK
+linux-libc-dev_1_amd64.deb: OK
+```
+
+SHA256 values:
+
+```text
+c6f6c285dcaabea6c74c4ce9104c1f24306af6aa91488c025857b24d753833b3  linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
+f771ac4bf1aeab9027ece24ab19fc263047d34879cbcc568c072e3ed9c419cc5  linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
+9d0bb472282cd22696db71419b57b17592d9cba8918621aaa4607c77020f050a  linux-libc-dev_1_amd64.deb
 ```
 
 ## 3. Install Kernel

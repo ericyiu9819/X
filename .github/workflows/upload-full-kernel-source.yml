@@ -1,6 +1,6 @@
 name: Upload full kernel source
 
-on:
+"on":
   workflow_dispatch:
   push:
     paths:

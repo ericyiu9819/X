@@ -1,0 +1,50 @@
+name: Upload compiled kernel artifacts
+
+on:
+  push:
+    paths:
+      - '.github/workflows/upload-kernel-artifacts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  upload-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download compiled kernel packages
+        run: |
+          set -eux
+          mkdir -p artifacts/deb
+          base_url="http://38.54.82.215:8000"
+          curl -fL --retry 5 --retry-delay 5 -o artifacts/deb/linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb "$base_url/linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb"
+          curl -fL --retry 5 --retry-delay 5 -o artifacts/deb/linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb "$base_url/linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb"
+          curl -fL --retry 5 --retry-delay 5 -o artifacts/deb/linux-libc-dev_1_amd64.deb "$base_url/linux-libc-dev_1_amd64.deb"
+
+      - name: Verify checksums
+        run: |
+          set -eux
+          cd artifacts/deb
+          cat > SHA256SUMS <<'EOF'
+          c6f6c285dcaabea6c74c4ce9104c1f24306af6aa91488c025857b24d753833b3  linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
+          f771ac4bf1aeab9027ece24ab19fc263047d34879cbcc568c072e3ed9c419cc5  linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
+          9d0bb472282cd22696db71419b57b17592d9cba8918621aaa4607c77020f050a  linux-libc-dev_1_amd64.deb
+          EOF
+          sha256sum -c SHA256SUMS
+
+      - name: Commit kernel packages
+        run: |
+          set -eux
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/deb/
+          if git diff --cached --quiet; then
+            echo "No artifact changes to commit."
+          else
+            git commit -m "Add compiled bbrplus_ai kernel packages"
+            git push
+          fi

@@ -1,0 +1,124 @@
+name: Upload full kernel source
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/upload-full-kernel-source.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  upload-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download source snapshot parts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/source
+          base="http://38.54.82.215:8000"
+          for part in 000 001 002; do
+            curl -fL --retry 5 --retry-delay 5 \
+              "$base/bbrplus-ai-kernel-source.tar.zst.part-$part" \
+              -o "artifacts/source/bbrplus-ai-kernel-source.tar.zst.part-$part"
+          done
+          curl -fL --retry 5 --retry-delay 5 \
+            "$base/bbrplus-ai-kernel-source.tar.zst.sha256" \
+            -o artifacts/source/bbrplus-ai-kernel-source.tar.zst.sha256
+          sed -i 's#.*/##' artifacts/source/bbrplus-ai-kernel-source.tar.zst.sha256
+
+      - name: Verify source parts
+        run: |
+          set -euo pipefail
+          cd artifacts/source
+          sha256sum bbrplus-ai-kernel-source.tar.zst.part-* > SHA256SUMS.parts
+          grep -q '56c2fbcf32d1dd00cb6c44227a8bedf90a9707103b8985c4b3c45ffa3f29d6ef  bbrplus-ai-kernel-source.tar.zst.part-000' SHA256SUMS.parts
+          grep -q 'e25c70ca2e26174848c9256b492b1b4bfa8038cf4eea00ed3e44c87ab29b09dd  bbrplus-ai-kernel-source.tar.zst.part-001' SHA256SUMS.parts
+          grep -q '4b0a0f294f1a06b5dad794952e3c40b06c98e5c0033b4cf32b3ebc85734465bf  bbrplus-ai-kernel-source.tar.zst.part-002' SHA256SUMS.parts
+          cat bbrplus-ai-kernel-source.tar.zst.part-* > bbrplus-ai-kernel-source.tar.zst
+          echo '2f5190f28822eb18739b05bccfdd8c3a703819f5db466151908fc949bca02361  bbrplus-ai-kernel-source.tar.zst' | sha256sum -c -
+          rm bbrplus-ai-kernel-source.tar.zst
+
+      - name: Write source README
+        run: |
+          set -euo pipefail
+          cat > artifacts/source/README.md <<'EOF'
+# bbrplus_ai full kernel source snapshot
+
+This directory contains the complete source snapshot for the custom `bbrplus_ai` kernel, split into GitHub-safe parts.
+
+## Files
+
+- `bbrplus-ai-kernel-source.tar.zst.part-000`
+- `bbrplus-ai-kernel-source.tar.zst.part-001`
+- `bbrplus-ai-kernel-source.tar.zst.part-002`
+- `bbrplus-ai-kernel-source.tar.zst.sha256`
+- `SHA256SUMS.parts`
+
+## Restore
+
+```bash
+cat bbrplus-ai-kernel-source.tar.zst.part-* > bbrplus-ai-kernel-source.tar.zst
+sha256sum -c bbrplus-ai-kernel-source.tar.zst.sha256
+tar --zstd -xf bbrplus-ai-kernel-source.tar.zst
+```
+
+The extracted directory is `bbrplus-ai-kernel-source/`.
+EOF
+          cat > BUILD.md <<'EOF'
+# Build bbrplus_ai Kernel From Source
+
+The compiled Debian packages are in `artifacts/deb/`.
+
+The complete kernel source snapshot is split under `artifacts/source/`.
+
+## Restore Source
+
+```bash
+cd artifacts/source
+cat bbrplus-ai-kernel-source.tar.zst.part-* > bbrplus-ai-kernel-source.tar.zst
+sha256sum -c bbrplus-ai-kernel-source.tar.zst.sha256
+tar --zstd -xf bbrplus-ai-kernel-source.tar.zst
+cd bbrplus-ai-kernel-source
+```
+
+## What Is Included
+
+- Google BBR v3 Linux source base: `90210de4b779`, tag `bbrv3-2025-03-18`
+- New congestion control: `net/ipv4/tcp_bbrplus_ai.c`
+- Kernel integration: `net/ipv4/Kconfig`, `net/ipv4/Makefile`
+- Build config: `.config`
+- Build log: `build-bbrplus-ai.log`
+
+## Build
+
+On Debian/Ubuntu, install build dependencies, then run:
+
+```bash
+make olddefconfig
+make -j"$(nproc)" bindeb-pkg LOCALVERSION=-bbrplus-ai
+```
+
+The resulting `.deb` packages can be installed with:
+
+```bash
+dpkg -i ../linux-image-*_amd64.deb ../linux-headers-*_amd64.deb
+```
+EOF
+
+      - name: Commit source snapshot
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/source BUILD.md
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git commit -m "Add full bbrplus_ai kernel source snapshot"
+          git push

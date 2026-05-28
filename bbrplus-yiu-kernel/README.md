@@ -32,7 +32,11 @@ This is a pure aggressive variant. It may improve burst/download/video throughpu
 
 ## Repository contents
 
-- `patches/bbrplus-yiu.patch` - complete source diff including the new `tcp_bbrplus_yiu.c` implementation.
+- `src/net/ipv4/tcp_bbrplus_yiu.c` - new congestion-control implementation.
+- `src/net/ipv4/Kconfig` - TCP congestion-control menu with `BBRPLUS_YIU` entries.
+- `src/net/ipv4/Makefile` - build wiring for `tcp_bbrplus_yiu.o`.
+- `kernel-config-6.13.7-bbrplus-yiu+` - kernel config used for the build.
+- `patches/bbrplus-yiu.patch` - source diff against the working kernel tree.
 - `artifacts/SHA256SUMS` - checksums for the generated `.deb` packages.
 - `scripts/install-local-debs.sh` - helper for installing local generated packages.
 

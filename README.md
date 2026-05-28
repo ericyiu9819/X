@@ -4,6 +4,12 @@ Build date: 2026-05-28, Asia/Shanghai
 
 This repository records the custom Linux kernel compiled today with a new TCP congestion control algorithm named `bbrplus_ai`.
 
+## Quick Links
+
+- [Install guide for other VPS](INSTALL.md)
+- [Algorithm details](ALGORITHM.md)
+- [Sysctl config](sysctl/999-bbrplus-ai.conf)
+
 ## Kernel
 
 - Base tree: Google BBR v3 tree, Linux 6.13.7
@@ -110,6 +116,14 @@ linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
 linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
 linux-libc-dev_1_amd64.deb
 ```
+
+The packages are currently stored on the build host at:
+
+```text
+38.54.82.215:/root/build-bbrv3-6.13.7/
+```
+
+See [INSTALL.md](INSTALL.md) for copy and install commands.
 
 File sizes:
 

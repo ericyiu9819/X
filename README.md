@@ -1,171 +1,48 @@
-# BBR Plus AI Kernel
+# X Kernel: Linux 6.6.141 BBR Gain 340
 
-Build date: 2026-05-28, Asia/Shanghai
+This repository contains a custom Linux kernel build based on Linux 6.6.141 LTS.
 
-This repository records the custom Linux kernel compiled today with a new TCP congestion control algorithm named `bbrplus_ai`.
+The kernel keeps the upstream TCP congestion control name `bbr`, but changes the
+BBR constants in `net/ipv4/tcp_bbr.c` for a more aggressive sender profile.
 
-## Quick Links
+## Release
 
-- [Install guide for other VPS](INSTALL.md)
-- [Algorithm details](ALGORITHM.md)
-- [Sysctl config](sysctl/999-bbrplus-ai.conf)
+- Kernel release: `6.6.141-bbrgain340`
+- Base kernel: Linux `6.6.141`
+- Architecture: `amd64`
+- Target systems: Debian/Ubuntu x86_64 VPS/KVM environments
+- Build host used: `38.54.82.215`
 
-## Kernel
+## BBR Parameters
 
-- Base tree: Google BBR v3 tree, Linux 6.13.7
-- Base commit suffix: `g90210de4b779`
-- Kernel release: `6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty`
-- Architecture: `x86_64` / `amd64`
-- Build host OS: Ubuntu 24.04.2 LTS
-- Build host: `38.54.82.215`
-- Build time shown by kernel: `Thu May 28 11:08:05 CST 2026`
+| Parameter | Value |
+| --- | --- |
+| BBRStartupPacingGain | `3.4` |
+| BBRStartupCwndGain | `3.4` |
+| BBRPacingGain | `1.7` |
+| BBRCwndGain | `3.4` |
+| BBRLossThresh | `0.55` |
+| BBRProbeBWGain | `1.6` |
+| BBRProbeRTTGain | `1.0` |
+| BBRMinRttFilterLen | `6` seconds |
 
-## New Congestion Control
+## Files
 
-Algorithm name:
+- `artifacts/deb/`: installable Debian packages.
+- `patches/bbrgain340-tcp_bbr.patch`: unified diff against upstream Linux 6.6.141.
+- `patches/patch_bbr_6_6_141.py`: patch helper used during build.
+- `src/net/ipv4/tcp_bbr.c`: patched BBR source file.
+- `config/kernel-config-6.6.141-bbrgain340`: kernel `.config` used for the build.
+- `scripts/build_6_6_141_bbrgain.sh`: build script used on the build host.
+- `sysctl/9999-bbrgain340.conf`: runtime BBR/fq sysctl settings.
+- `SHA256SUMS`: checksums for release artifacts and source materials.
+- `build.log`: build log from the successful package build.
 
-```text
-bbrplus_ai
-```
+## Install
 
-Available after boot:
-
-```text
-reno bbr bbrplus_ai cubic
-```
-
-Enabled runtime configuration:
-
-```conf
-net.core.default_qdisc = fq
-net.ipv4.tcp_congestion_control = bbrplus_ai
-net.ipv4.tcp_notsent_lowat = 16384
-net.ipv4.tcp_limit_output_bytes = 131072
-net.ipv4.tcp_slow_start_after_idle = 0
-net.ipv4.tcp_no_metrics_save = 1
-net.ipv4.tcp_mtu_probing = 1
-```
-
-## What Was Changed
-
-A new independent TCP congestion control module was added instead of replacing existing `bbr` or `cubic`:
-
-```text
-net/ipv4/tcp_bbrplus_ai.c
-```
-
-Kernel build integration:
-
-```text
-CONFIG_TCP_CONG_BBRPLUS_AI=y
-obj-$(CONFIG_TCP_CONG_BBRPLUS_AI) += tcp_bbrplus_ai.o
-```
-
-Kconfig also gained:
-
-```text
-config TCP_CONG_BBRPLUS_AI
-config DEFAULT_BBRPLUS_AI
-default "bbrplus_ai" if DEFAULT_BBRPLUS_AI
-```
-
-## Adaptive Logic
-
-`bbrplus_ai` is based on the BBR Plus / BBR v1 style state machine, but adds a lightweight in-kernel adaptive controller. It measures RTT inflation:
-
-```c
-rtt_ratio = srtt_us / min_rtt_us
-```
-
-Then it dynamically changes `pacing_gain` and `cwnd_gain`.
-
-Behavior summary:
-
-```text
-Clean RTT:
-    keep normal BBR Plus-style probing
-    probe high gain can remain around 1.25
-    cwnd gain remains around 2.0
-
-RTT mildly inflated, >= 1.15x min_rtt:
-    reduce high probing to around 1.10
-    reduce cwnd gain to around 1.75
-
-RTT inflated, >= 1.30x min_rtt:
-    avoid aggressive probing
-    use around 0.90 / 1.00 pacing behavior
-    reduce cwnd gain to around 1.50
-
-RTT heavily inflated, >= 1.50x min_rtt:
-    force conservative pacing around 0.75
-    reduce cwnd gain to around 1.25
-
-Long-term bandwidth / policer mode:
-    use pacing gain 1.00
-    reduce cwnd gain to around 1.25
-```
-
-The goal is not maximum speed-test burst, but better VPS web browsing and video playback stability by reducing queue buildup and RTT spikes.
-
-## Build Artifacts
-
-Generated Debian packages:
-
-```text
-linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-linux-libc-dev_1_amd64.deb
-```
-
-The packages are currently stored on the build host at:
-
-```text
-38.54.82.215:/root/build-bbrv3-6.13.7/
-```
-
-See [INSTALL.md](INSTALL.md) for copy and install commands.
-
-File sizes:
-
-```text
-12M   linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-8.8M  linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-1.4M  linux-libc-dev_1_amd64.deb
-```
-
-SHA256:
-
-```text
-c6f6c285dcaabea6c74c4ce9104c1f24306af6aa91488c025857b24d753833b3  linux-image-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-f771ac4bf1aeab9027ece24ab19fc263047d34879cbcc568c072e3ed9c419cc5  linux-headers-6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty_1_amd64.deb
-9d0bb472282cd22696db71419b57b17592d9cba8918621aaa4607c77020f050a  linux-libc-dev_1_amd64.deb
-```
-
-## Verified VPS Installs
-
-### 38.54.82.215
-
-```text
-OS: Ubuntu 24.04.2 LTS
-Kernel: 6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty
-Available congestion control: reno bbr bbrplus_ai cubic
-Active congestion control: bbrplus_ai
-Default qdisc: fq
-```
-
-### 203.88.127.40
-
-```text
-OS: Debian 12 bookworm
-Kernel: 6.13.7-bbrv3-g90210-bbrplus-ai-g90210de4b779-dirty
-Available congestion control: reno bbr bbrplus_ai cubic
-Active congestion control: bbrplus_ai
-Default qdisc: fq
-```
+See `INSTALL.md`.
 
 ## Notes
 
-- Existing `bbr` and `cubic` remain available as fallback algorithms.
-- This is an experimental custom kernel.
-- The algorithm is a lightweight adaptive controller inside the kernel, not a neural-network or large-model AI runtime.
-- For web/video VPS traffic, the tuning intentionally favors lower RTT spikes and more stable delivery over peak benchmark numbers.
+This is an aggressive BBR tuning intended for VPS proxy/upload workloads where
+fast startup and pushing traffic out quickly matter more than fairness.

@@ -1,163 +1,37 @@
-# bbrplus_ai Algorithm
+# Algorithm Changes
 
-`bbrplus_ai` is a lightweight in-kernel adaptive TCP congestion control algorithm.
+The patch modifies upstream Linux 6.6.141 `net/ipv4/tcp_bbr.c`.
 
-It is not a neural-network model. The word `AI` here means automatic adaptive tuning inside the kernel.
-
-## Base Logic
-
-The algorithm keeps the BBR Plus / BBR v1 model:
-
-```text
-bottleneck_bandwidth = max recent delivery rate
-min_rtt = minimum RTT over the sampling window
-BDP = bottleneck_bandwidth * min_rtt
-pacing_rate = bottleneck_bandwidth * pacing_gain
-cwnd = BDP * cwnd_gain
-```
-
-State machine:
-
-```text
-STARTUP
-DRAIN
-PROBE_BW
-PROBE_RTT
-```
-
-## New Adaptive Signal
-
-`bbrplus_ai` adds RTT inflation awareness:
-
-```text
-rtt_ratio = smoothed_rtt / min_rtt
-```
-
-In kernel code:
+BBR uses fixed-point gain values with:
 
 ```c
-static u32 bbrplus_ai_rtt_ratio(const struct sock *sk, const struct bbr *bbr)
-{
-    const struct tcp_sock *tp = tcp_sk(sk);
-    u32 srtt_us = tp->srtt_us >> 3;
-
-    if (!bbr->min_rtt_us || !srtt_us)
-        return BBR_UNIT;
-
-    return min_t(u32, (u64)srtt_us * BBR_UNIT / bbr->min_rtt_us,
-                 BBR_UNIT * 4);
-}
+#define BBR_SCALE 8
+#define BBR_UNIT (1 << BBR_SCALE)
 ```
 
-## Adaptive Gain Rules
+So:
 
-### STARTUP
+- `3.4` is represented as `BBR_UNIT * 34 / 10`.
+- `1.7` is represented as `BBR_UNIT * 17 / 10`.
+- `1.6` is represented as `BBR_UNIT * 16 / 10`.
+- `0.55` is represented as `BBR_UNIT * 55 / 100`.
 
-Original BBR Plus uses very aggressive startup gain.
+## Main Changes
 
-`bbrplus_ai` keeps aggressive startup only when RTT is still clean:
+- Min RTT filter window changed from `10` seconds to `6` seconds.
+- STARTUP pacing gain changed from upstream `2.885` to `3.4`.
+- STARTUP cwnd gain changed to `3.4`.
+- steady-state cwnd gain changed from `2.0` to `3.4`.
+- PROBE_BW first probe gain changed from `1.25` to `1.6`.
+- PROBE_BW cruise phases changed from `1.0` to `1.7`.
+- long-term loss threshold changed from `50` to `0.55` in BBR fixed-point form.
+- PROBE_RTT gain remains `1.0`.
 
-```text
-if rtt_ratio > 1.30:
-    startup pacing_gain = 2.30
-else:
-    startup pacing_gain = 2.885
-```
+## Behavior
 
-Purpose: avoid exploding queues during startup on VPS routes.
+This is a high-pressure sender profile. It is designed to start faster, keep a
+larger cwnd, tolerate more random loss, and continue pacing above the measured
+bandwidth estimate during the PROBE_BW cycle.
 
-### DRAIN
-
-```text
-pacing_gain = bbr_drain_gain
-```
-
-If RTT is heavily inflated:
-
-```text
-if rtt_ratio > 1.50:
-    cwnd_gain = 1.25
-else:
-    cwnd_gain = high_gain
-```
-
-Purpose: drain queue more effectively when latency is already high.
-
-### PROBE_BW
-
-This is the main adaptive part.
-
-```text
-if lt_use_bw:
-    pacing_gain = 1.00
-    cwnd_gain = 1.25
-
-else if rtt_ratio >= 1.50:
-    pacing_gain = 0.75
-    cwnd_gain = 1.25
-
-else if rtt_ratio >= 1.30:
-    high probe phase uses 0.90, other phases use 1.00
-    cwnd_gain = 1.50
-
-else if rtt_ratio >= 1.15:
-    high probe phase uses 1.10
-    cwnd_gain = 1.75
-
-else:
-    use normal BBR Plus / BBR v1 probe cycle
-    cwnd_gain = 2.00
-```
-
-## Behavior Summary
-
-```text
-Clean link:
-    behaves close to BBR Plus / BBR v1
-    keeps bandwidth probing ability
-
-Mild queue buildup:
-    reduces probe aggressiveness
-    reduces inflight target
-
-Heavy queue buildup:
-    stops high-gain probing
-    actively drains by pacing below estimated bandwidth
-
-Long-term bandwidth / suspected policer:
-    avoids repeated aggressive probing
-    keeps cwnd lower
-```
-
-## Why This Helps Web and Video
-
-Web browsing and video playback often suffer when a VPS route builds excessive queue delay:
-
-```text
-large transfer fills queue
-small web requests wait behind queue
-ACKs return late
-video buffer becomes unstable
-```
-
-`bbrplus_ai` tries to keep throughput high while reducing RTT spikes:
-
-```text
-only probe aggressively when RTT is clean
-back off when extra sending only creates queue delay
-keep fq pacing enabled
-limit excessive unsent/output buffering with sysctl
-```
-
-## Tradeoff
-
-This algorithm may show slightly lower peak speed-test numbers than a very aggressive BBR Plus build.
-
-Expected benefit:
-
-```text
-better web page opening behavior
-smoother video playback
-lower RTT spikes during sustained transfer
-less repeated collision with VPS/ISP policers
-```
+It is best suited for single-user VPS proxy/upload workloads. It may increase
+queueing delay and reduce fairness on narrow or already-congested links.
